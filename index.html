@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>無料Web内線電話</title>
+  <script src="https://jsdelivr.net"></script>
+</head>
+<body style="font-family: sans-serif; padding: 20px;">
+  <h2>Web内線システム</h2>
+  <p>内線部屋番号（例: 101）を入力して「通話開始」を押してください。</p>
+  
+  <input type="text" id="room-name" value="101" placeholder="内線番号" style="font-size: 18px; padding: 8px;">
+  <button id="join-btn" style="font-size: 18px; padding: 8px 16px;">通話開始</button>
+  <button id="leave-btn" style="font-size: 18px; padding: 8px 16px;" disabled>切断</button>
+  
+  <div id="status" style="margin-top: 15px; color: green;">待機中</div>
+  <div id="audio-container"></div>
+
+  <script>
+    const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
+
+    // ここにSkyWayコンソールで取得したIDとキーを入力
+    const APP_ID = '02523aa7-3dd3-41c2-89f9-8f669ec7aa78';
+    const SECRET_KEY = 'dWClXRSVdu3p4/f6QLaGy6Qok4nIKQF+oJhBMAOVjhU=';
+
+    let room = null;
+    let member = null;
+
+    // 認証トークンの生成
+    function createToken() {
+      return new SkyWayAuthToken({
+        jti: uuidV4(),
+        iat: nowInSec(),
+        exp: nowInSec() + 60 * 60 * 24,
+        scope: {
+          app: {
+            id: APP_ID,
+            turn: true, // モバイル回線越え(TURN)を有効化
+            actions: ['read'],
+            channels: [{
+              id: '*',
+              name: '*',
+              actions: ['write'],
+              members: [{
+                id: '*',
+                name: '*',
+                actions: ['write'],
+                publication: { actions: ['write'] },
+                subscription: { actions: ['write'] },
+              }],
+            }],
+          },
+        },
+      }).encode(SECRET_KEY);
+    }
+
+    document.getElementById('join-btn').onclick = async () => {
+      const roomName = document.getElementById('room-name').value;
+      if (!roomName) return alert('内線番号を入力してください');
+
+      document.getElementById('status').textContent = '接続中...';
+      
+      // 1. マイク音声の取得
+      const audio = await SkyWayStreamFactory.createMicrophoneAudioStream();
+
+      // 2. SkyWayへ接続し、内線番号（ルーム）に参加
+      const context = await SkyWayContext.Create(createToken());
+      room = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: roomName });
+      member = await room.join();
+
+      // 3. 自分の音声を配信
+      await member.publish(audio);
+
+      // 4. 相手の音声を受信して再生
+      const subscribeAndAttach = async (publication) => {
+        if (publication.publisher.id === member.id) return;
+        const { stream } = await member.subscribe(publication.id);
+        const audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        stream.attach(audioEl);
+        document.getElementById('audio-container').appendChild(audioEl);
+      };
+
+      room.publications.forEach(subscribeAndAttach);
+      room.onStreamPublished.add((e) => subscribeAndAttach(e.publication));
+
+      document.getElementById('status').textContent = `内線 [${roomName}] で通話中`;
+      document.getElementById('join-btn').disabled = true;
+      document.getElementById('leave-btn').disabled = false;
+    };
+
+    document.getElementById('leave-btn').onclick = async () => {
+      if (member) await member.leave();
+      if (room) await room.dispose();
+      document.getElementById('audio-container').innerHTML = '';
+      document.getElementById('status').textContent = '切断しました';
+      document.getElementById('join-btn').disabled = false;
+      document.getElementById('leave-btn').disabled = true;
+    };
+  </script>
+</body>
+</html>
