@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web内線電話</title>
-  <!-- 確実に動作するSkyWay Room SDKの指定バージョンを読み込み -->
   <script src="https://jsdelivr.net"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 480px; margin: auto; }
@@ -27,14 +26,12 @@
     const SECRET_KEY = 'RFmxZa27+QwtAkwJMEIrahsUmAwwPUo+jOsyourLQy0=';
   </script>
 
-  <!-- ステップ1：自分の内線番号を登録 -->
   <div class="box" id="login-box">
     <label>① 自分の内線番号（例: 101）</label>
     <input type="text" id="my-ext" value="101" placeholder="自分の番号を入力">
     <button id="login-btn">内線に接続（待機開始）</button>
   </div>
 
-  <!-- ステップ2：相手へ発信 -->
   <div class="box" id="call-box" style="display:none;">
     <p>あなたの番号: <strong id="display-my-ext"></strong></p>
     <label>② かけたい相手の内線番号（例: 102）</label>
@@ -43,7 +40,6 @@
     <button id="hangup-btn" class="danger" disabled>通話終了（切断）</button>
   </div>
 
-  <!-- 着信時のポップアップ -->
   <div class="box" id="incoming-box" style="display:none; background:#fff3cd; border-color:#ffeeba;">
     <p style="font-weight:bold; color:#856404;">📞 <span id="caller-id"></span> 番から着信中...</p>
     <button id="answer-btn" class="success">応答する</button>
@@ -62,9 +58,8 @@
       errorEl.textContent = 'エラー: ' + msg;
     }
 
-    // SDKが読み込めているか確認
     if (typeof skyway_room === 'undefined') {
-      showError('SkyWay SDKの読み込みに失敗しました。通信環境を確認してください。');
+      showError('SkyWay SDKの読み込みに失敗しました。');
     }
 
     const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
@@ -76,7 +71,6 @@
     let localAudio = null;
     let ringtoneInterval = null;
 
-    // 簡易着信音（Web Audio APIで電子音を鳴らす）
     function startRingtone() {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       ringtoneInterval = setInterval(() => {
@@ -111,7 +105,6 @@
       }).encode(SECRET_KEY);
     }
 
-    // ① 自分の内線番号でログイン（自分の着信専用ルームで待機）
     document.getElementById('login-btn').onclick = async () => {
       try {
         myExt = document.getElementById('my-ext').value.trim();
@@ -120,25 +113,21 @@
 
         context = await SkyWayContext.Create(createToken());
         
-        // 自分の番号専用の着信待ち受けルームを作成して待機
         const waitRoom = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: 'ext_' + myExt });
         const me = await waitRoom.join({ name: myExt });
 
-        // 誰かが自分の部屋に入ってきたら「着信」とみなす
         waitRoom.onMemberJoined.add((e) => {
           if (e.member.id === me.id) return;
           document.getElementById('caller-id').textContent = e.member.name || '不明';
           document.getElementById('incoming-box').style.display = 'block';
           startRingtone();
 
-          // 応答ボタン
           document.getElementById('answer-btn').onclick = async () => {
             stopRingtone();
             document.getElementById('incoming-box').style.display = 'none';
             await startVoiceSession(waitRoom, me, e.member.name);
           };
 
-          // 拒否ボタン
           document.getElementById('reject-btn').onclick = () => {
             stopRingtone();
             document.getElementById('incoming-box').style.display = 'none';
@@ -154,7 +143,6 @@
       }
     };
 
-    // ② 相手の内線番号へ発信
     document.getElementById('call-btn').onclick = async () => {
       try {
         const targetExt = document.getElementById('target-ext').value.trim();
@@ -170,7 +158,6 @@
       }
     };
 
-    // 音声通話の開始処理
     async function startVoiceSession(room, me, partnerName) {
       activeRoom = room;
       activeMember = me;
@@ -194,7 +181,6 @@
       document.getElementById('hangup-btn').disabled = false;
     }
 
-    // 切断処理
     document.getElementById('hangup-btn').onclick = async () => {
       stopRingtone();
       if (localAudio) localAudio.release();
